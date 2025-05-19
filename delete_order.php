@@ -2,6 +2,8 @@
 require_once 'config.php';
 session_start();
 
+header('Content-Type: application/json');
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
     $orderId = $_POST['order_id'];
     
@@ -26,7 +28,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
         $pdo->rollBack();
         echo json_encode([
             'success' => false,
-            'message' => 'Error deleting order'
+            'message' => 'Error deleting order: ' . $e->getMessage()
         ]);
     }
+} else {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Invalid request'
+    ]);
 }
+exit;

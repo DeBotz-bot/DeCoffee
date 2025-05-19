@@ -318,6 +318,7 @@ $cartCount = array_sum($_SESSION['cart']);
                     }
                 });
             }
+            updateStats();
         });
 
 $('#adminLogin').click(function(e) {
@@ -463,26 +464,40 @@ function showReceiptPopup() {
                 },
                 dataType: 'json', // Add this line to ensure JSON parsing
                 success: function(response) {
-                    if (response.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Success!',
-                            text: 'Order has been saved',
-                            timer: 2000
-                        }).then(() => {
-                            // Clear cart display
-                            $('#cartItems').html('<p class="text-center">Your cart is empty</p>');
-                            $('#cartCount').text('0');
-                            $('#cartSidebar, #cartOverlay').removeClass('active');
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: response.message || 'An error occurred'
-                        });
-                    }
-                },
+                if (response.success) {
+                    // Broadcast the new order to save_order.php
+                    $.ajax({
+                        url: 'get_latest_order.php',
+                        method: 'GET',
+                        dataType: 'json',
+                        success: function(orderData) {
+                            if (orderData.success) {
+                                // Show success message
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Success!',
+                                    text: 'Order has been saved',
+                                    timer: 2000
+                                }).then(() => {
+                                    // Clear cart display
+                                    $('#cartItems').html('<p class="text-center">Your cart is empty</p>');
+                                    $('#cartCount').text('0');
+                                    $('#cartSidebar, #cartOverlay').removeClass('active');
+                                });
+
+                                // Notify save_order.php about the new order
+                                broadcastNewOrder(orderData.order);
+                            }
+                        }
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: response.message || 'An error occurred'
+                    });
+                }
+            },
                 error: function(xhr, status, error) {
                     console.error('Response:', xhr.responseText);
                     console.error('Status:', status);
@@ -501,6 +516,52 @@ function showReceiptPopup() {
 function number_format(number) {
     return new Intl.NumberFormat('id-ID').format(number);
 }
+
+// Add this function to handle broadcasting
+function broadcastNewOrder(order) {
+    $.ajax({
+        url: 'broadcast_order.php',
+        method: 'POST',
+        data: { order: JSON.stringify(order) },
+        success: function(response) {
+            console.log('Order broadcasted successfully');
+        }
+    });
+}
+function updateStats() {
+    // Get all orders
+    const totalOrders = $('.order-card').length;
+    
+    // Get today's date
+    const today = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',  
+        year: 'numeric'
+    });
+    
+    // Count today's orders
+    const todayOrders = $('.order-date').filter(function() {
+        return $(this).text().trim().includes(today);
+    }).length;
+    
+    // Calculate total revenue
+    let totalRevenue = 0;
+    $('.order-total').each(function() {
+        const amount = parseInt($(this).text().replace(/[^0-9]/g, ''));
+        if (!isNaN(amount)) {
+            totalRevenue += amount;
+        }
+    });
+
+    // Update stats if elements exist
+    if ($('.stat-value').length) {
+        $('.stat-value').first().text(totalOrders);
+        $('.stat-value').eq(1).text(todayOrders);
+        $('.stat-value').last().text('Rp ' + new Intl.NumberFormat('id-ID').format(totalRevenue));
+    }
+}
+
+
     </script>
 </body>
 </html>

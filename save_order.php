@@ -273,7 +273,7 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
 
         <!-- Orders List -->
-        <div class="row">
+       <div class="row" id="ordersList">
             <?php foreach ($orders as $order): ?>
             <div class="col-md-6">
                 <div class="order-card">
@@ -319,7 +319,112 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 $(document).ready(function() {
-    $('.delete-order').click(function() {
+    // Initialize delete order handlers
+    $(document).on('click', '.delete-order', function() {
+        const orderId = $(this).data('id');
+        const orderCard = $(this).closest('.col-md-6');
+        
+        Swal.fire({
+            title: 'Delete Order',
+            text: 'Are you sure you want to delete this order?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: 'delete_order.php',
+                    method: 'POST',
+                    data: { order_id: orderId },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            // Remove order card with animation
+                            orderCard.fadeOut(500, function() {
+                                $(this).remove();
+                                // Update stats after removal
+                                updateStats();
+                            });
+                            
+                            // Show success message
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Deleted!',
+                                text: 'Order has been deleted',
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: response.message || 'Failed to delete order'
+                            });
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Delete error:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'Failed to delete order. Please try again.'
+                        });
+                    }
+                });
+            }
+        });
+    });
+    // Add this function in save_order.php
+    function loadLatestOrder() {
+        return $.ajax({
+            url: 'get_latest_order.php',
+            method: 'GET',
+            dataType: 'json'
+        });
+    }
+
+ $(document).ready(function() {
+    // Start polling for new orders
+    setInterval(checkForNewOrders, 5000); // Check every 5 seconds
+    
+    function checkForNewOrders() {
+        $.ajax({
+            url: 'get_latest_order.php',
+            method: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    // Check if this is a new order we haven't displayed yet
+                    const existingOrder = $(`.order-number:contains("#${response.order.id}")`);
+                    if (existingOrder.length === 0) {
+                        // Prepend new order with animation
+                        $(response.html)
+                            .hide()
+                            .prependTo('#ordersList')
+                            .fadeIn(500);
+                            
+                        // Update statistics
+                        updateStats();
+                        
+                        // Show notification
+                        Swal.fire({
+                            toast: true,
+                            position: 'top-end',
+                            icon: 'success',
+                            title: 'New order received!',
+                            showConfirmButton: false,
+                            timer: 3000
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+    // Initialize delete order handlers
+    $(document).on('click', '.delete-order', function() {
         const orderId = $(this).data('id');
         const orderCard = $(this).closest('.col-md-6');
         
@@ -338,53 +443,67 @@ $(document).ready(function() {
                     method: 'POST',
                     data: { order_id: orderId },
                     success: function(response) {
-                        const data = JSON.parse(response);
-                        if (data.success) {
-                            // Remove the order card from DOM
-                            orderCard.fadeOut(300, function() {
+                        if (response.success) {
+                            // Remove order card from UI
+                            orderCard.fadeOut(500, function() {
                                 $(this).remove();
+                                
                                 // Update stats
                                 updateStats();
                             });
                             
-                            Swal.fire(
-                                'Deleted!',
-                                'Order has been deleted.',
-                                'success'
-                            );
+                            // Show success message
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Deleted!',
+                                text: 'Order has been deleted',
+                                timer: 2000
+                            });
                         } else {
-                            Swal.fire(
-                                'Error!',
-                                'Failed to delete order.',
-                                'error'
-                            );
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: response.message || 'An error occurred'
+                            });
                         }
                     }
                 });
             }
         });
     });
+}); // Close $(document).ready()
+
+// Define updateStats globally
+function updateStats() {
+    // Get all orders
+    const totalOrders = $('.order-card').length;
+    $('.stat-value').first().text(totalOrders);
     
-    function updateStats() {
-        // Get all remaining orders
-        const totalOrders = $('.order-card').length;
-        $('.stat-value').first().text(totalOrders);
-        
-        // Update today's orders
-        const today = new Date().toISOString().split('T')[0];
-        const todayOrders = $('.order-date').filter(function() {
-            return $(this).text().trim().includes(today);
-        }).length;
-        $('.stat-value').eq(1).text(todayOrders);
-        
-        // Update total revenue
-        let totalRevenue = 0;
-        $('.order-total').each(function() {
-            const amount = parseInt($(this).text().replace(/[^0-9]/g, ''));
+    // Get today's date
+    const today = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    });
+    
+    // Count today's orders
+    const todayOrders = $('.order-date').filter(function() {
+        return $(this).text().trim().includes(today);
+    }).length;
+    $('.stat-value').eq(1).text(todayOrders);
+    
+    // Calculate total revenue
+    let totalRevenue = 0;
+    $('.order-total').each(function() {
+        const amount = parseInt($(this).text().replace(/[^0-9]/g, ''));
+        if (!isNaN(amount)) {
             totalRevenue += amount;
-        });
-        $('.stat-value').last().text('Rp ' + new Intl.NumberFormat('id-ID').format(totalRevenue));
-    }
+        }
+    });
+    
+    // Format and update total revenue
+    $('.stat-value').last().text('Rp ' + new Intl.NumberFormat('id-ID').format(totalRevenue));
+}
 });
 </script>
 </body>
